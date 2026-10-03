@@ -5,4 +5,4 @@ docs/SPEC.md of https://github.com/thisisthepy/pythonx-concurrent, and implement
 thisisthepy ecosystem's order.
 """
 
-__version__ = "0.0.1a0"
+__version__ = "0.0.1a1"
