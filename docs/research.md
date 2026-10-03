@@ -108,7 +108,16 @@ dispatchers, a `Job` handle with Kotlin semantics, and the Kotlin bridge.
 - **Consequence for Python.** Every Python call from Kotlin goes through an FFM downcall on desktop.
   A virtual thread inside that call is pinned to its carrier for as long as the Python code runs,
   and a Python callback that blocks holds the carrier. A JVM virtual thread therefore does not turn
-  Python code into cheap threads. It helps only for Kotlin-side blocking work.
+  blocking-style Python into cheap threads. See the next point for what it can do.
+- **Stepping escapes pinning.** Pinning lasts only while a native frame is on the stack. A Python
+  coroutine driven one `send()` at a time from Kotlin holds a native frame only during the step; while
+  it waits on a Kotlin `suspend` call the virtual thread holds none and unmounts normally. So Python
+  coroutines can live on virtual threads; blocking-style Python cannot.
+- **Thread state versus `ThreadLocal`.** `PyGILState_Ensure` stores the thread state per OS thread.
+  python-multiplatform's `withGIL` keeps its nesting depth in a Java `ThreadLocal`
+  (`jvmMain/.../GILScope.jvm.kt`), which is per virtual thread. If a virtual thread unmounts inside
+  `withGIL`, the two disagree: the carrier still holds the GIL and the thread state, and the virtual
+  thread may release them later from another carrier. Read from the source, not observed in a run.
 - **Desktop JDK version.** python-multiplatform requires desktop FFI not to depend on one JDK version
   (AGENTS.md §16). Virtual threads need 21 or later, so they can only be an optional optimisation.
 - **Android.** The `java.lang.Thread` reference page for Android lists no virtual thread API
@@ -151,16 +160,16 @@ dispatchers, a `Job` handle with Kotlin semantics, and the Kotlin bridge.
 | Dispatchers.IO / Default for Python tasks | feasible | feasible | feasible (K/N has both) | absent |
 | Several asyncio loops on carrier threads | feasible | feasible | feasible | no |
 | Real CPU parallelism of Python code | only on 3.14t (opt-in) | no free-threaded prebuilt | no free-threaded prebuilt | no |
-| JVM virtual threads | JDK 21+, but pinned inside Python calls; Kotlin-side only | not available | not applicable | not applicable |
+| JVM virtual threads | JDK 21+; Python coroutines stepped from Kotlin, never blocking-style Python (SPEC S7.12) | not available | not applicable | not applicable |
 | Goroutine-style tasks over carriers | feasible; parallel on 3.14t, concurrent only on the GIL build | feasible, concurrent only | feasible, concurrent only | no |
 | Stackful virtual threads (blocking style) | `(unverified)` via greenlet | `(unverified)` | `(unverified)` | no |
 | Free-threaded safety work | needed | needed if a prebuilt appears | needed if a prebuilt appears | none |
 
 ## 9. What is hard or impossible
 
-1. **JVM virtual threads cannot host Python code** usefully (pinning in a foreign call). Android has
-   none. Kotlin/Native has none. So "virtual threads from Python" can only mean tasks scheduled over
-   threads, not a platform feature.
+1. **JVM virtual threads cannot host blocking-style Python** (pinning in a foreign call). They can host
+   Python coroutines stepped from Kotlin (§6, "Stepping escapes pinning"). Android and Kotlin/Native
+   have none, so there the same stepping runs on ordinary Kotlin dispatcher threads.
 2. **Preemption is impossible.** `asyncio` is cooperative. CPU-bound tasks need a carrier thread of
    their own, which helps only on a free-threaded build.
 3. **Moving a started task between threads is impossible** with `asyncio` tasks. Stealing is

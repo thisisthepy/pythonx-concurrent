@@ -87,9 +87,11 @@ Python app that runs on Kotlin Multiplatform (Android, iOS, desktop). It has fou
 - **Not a promise of identical behaviour on every platform.** Where the platform lacks a thing
   (threads on wasm, free-threaded builds on mobile), the feature is absent and says so. It is not
   stubbed.
-- **Not JVM virtual threads for Python code.** `docs/research.md` explains why they cannot run Python
-  frames usefully. The "virtual thread" of this project is a lightweight task scheduled over
-  threads.
+- **Not blocking-style Python on JVM virtual threads.** A virtual thread is pinned while Python
+  runs, so a plain blocking Python function gains nothing from one (`docs/research.md` §6). Python
+  coroutines do run on virtual threads and on any Kotlin thread, one step at a time, with Kotlin
+  scheduling them (SPEC §7, Kotlin mode). The maintainer asked for that (2026-10-04: "버추얼
+  쓰레드까지 붙이거나 필요한 경우 kotlin 스레드 위에서 돌리는 형태").
 - **Not a network, file or process library.** It schedules and bridges. I/O stays with `asyncio` and
   Kotlin.
 
