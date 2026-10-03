@@ -35,10 +35,10 @@ Writing to *another* repository is not an exception either. Do it only when told
 Do not create new folders or files at the repository root on your own. Temporary files go in the
 git-ignored `.tmp/`, CI scripts in `.github/scripts/`.
 
-The standing root entries are `README.md`, `AGENTS.md`, `LICENSE`, `.gitignore` and `docs/`. No
-package skeleton exists yet. If a new top-level entry seems necessary (`pythonx/`, `tests/`,
-`pyproject.toml`, a Kotlin module), propose it (what it is, why, and why it cannot live inside an
-existing directory) and wait for approval.
+The standing root entries are `README.md`, `AGENTS.md`, `LICENSE`, `.gitignore`, `.github/`, `docs/`,
+`pyproject.toml` and `pythonx/` (the package; added with the maintainer's approval on 2026-10-04 to
+reserve the name on PyPI). If another top-level entry seems necessary (`tests/`, a Kotlin module),
+propose it (what it is, why, and why it cannot live inside an existing directory) and wait for approval.
 
 ## 3. Worktrees link large artefacts instead of copying them
 
