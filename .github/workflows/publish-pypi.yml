@@ -1,0 +1,50 @@
+name: Publish to PyPI
+
+# Publishing a GitHub Release uploads its tag's commit through PyPI trusted publishing (no token).
+# The Release's tag must be `v` + the version in pyproject.toml; the `pypi` environment allows
+# `v*` tags only.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Check the Release's tag against pyproject.toml
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          test "$RELEASE_TAG" = "v$version" || { echo "tag $RELEASE_TAG does not match version $version"; exit 1; }
+      - run: uv build
+      - name: Smoke-install the wheel
+        run: |
+          uv venv --python 3.15 .smoke
+          uv pip install --python .smoke dist/*.whl
+          .smoke/bin/python -c "import pythonx.concurrent; print(pythonx.concurrent.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pythonx-concurrent
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
