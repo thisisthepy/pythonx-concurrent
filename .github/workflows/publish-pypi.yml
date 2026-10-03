@@ -23,6 +23,11 @@ jobs:
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
           test "$RELEASE_TAG" = "v$version" || { echo "tag $RELEASE_TAG does not match version $version"; exit 1; }
       - run: uv build
+      - name: Keep pythonx a namespace package
+        run: |
+          if unzip -l dist/*.whl | grep -q ' pythonx/__init__.py$'; then
+            echo 'pythonx/__init__.py would hide the other pythonx libraries'; exit 1
+          fi
       - name: Smoke-install the wheel
         run: |
           uv venv --python 3.15 .smoke
