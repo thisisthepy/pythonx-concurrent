@@ -11,7 +11,8 @@ Each item carries a status:
 | `partial` | Some of it exists, or its only evidence is outside this repository. |
 | `planned` | Required by INTENT; nothing delivers it yet. |
 
-Every entry below is `planned`. Issue markers read `Issue: to be opened`; the coordinator opens them.
+Every entry below is `planned`. The maintainer ranks this package after the other pythonx work
+(2026-10-04): the spec is written in detail now, implementation comes later. Issue markers read `Issue: to be opened`; the coordinator opens them.
 A line starting `needs binder:` is a request to python-multiplatform. It becomes an issue there and
 is collected in section 12.
 
@@ -326,10 +327,24 @@ suspension. Reason: cost. Both ends measure it (S10.4). Issue: to be opened.
 
 ---
 
-## 7. Virtual threads and M:N scheduling
+## 7. Virtual threads, Kotlin threads and M:N scheduling
 
-The word "virtual thread" here means a lightweight task scheduled over a few carrier threads. It is
-not a JVM virtual thread, which cannot run Python code usefully (`docs/research.md` §6).
+Two kinds of "virtual thread" appear here, and they are kept apart:
+
+- a **task**: a Python coroutine scheduled over a few carrier threads (S7.1 to S7.7);
+- a **JVM virtual thread** (JDK 21 and later, desktop only): a `java.lang.Thread` the JVM mounts on a
+  carrier. S7.8 to S7.14 say how Python runs on one, and on Kotlin threads in general.
+
+Python code reaches Kotlin threads in two ways:
+
+| Mode | Who schedules the Python coroutine | What it can await | Where it runs |
+|---|---|---|---|
+| **Loop mode** (S3, S4, S7.1 to S7.7) | an `asyncio` loop on a carrier | everything `asyncio` offers | a carrier loop, `Main`, the host loop |
+| **Kotlin mode** (S7.9 to S7.14) | a Kotlin coroutine that steps the Python coroutine | Kotlin `suspend` calls, `pythonx.concurrent` primitives, `Job`/`Deferred` | any Kotlin `CoroutineDispatcher`, including a virtual-thread one |
+
+Loop mode is the default. Kotlin mode exists because the maintainer asked for Python on virtual
+threads and on Kotlin threads, and because it is the only mode in which a started task can move
+between threads (S7.11).
 
 ### S7.1 Goroutine-style launch: `planned`
 
@@ -369,22 +384,120 @@ to be opened.
 
 ### S7.7 Per-platform availability: `planned`
 
-| Platform | Carrier threads | Parallel Python | Stackful virtual threads |
-|---|---|---|---|
-| Desktop | yes | 3.14t only | not evaluated |
-| Android | yes | no | not evaluated |
-| iOS | yes | no | not evaluated |
-| wasm | no | no | no |
+| Platform | Carrier threads | Parallel Python | Kotlin mode (S7.9) | JVM virtual threads (S7.12) | Stackful (S7.14) |
+|---|---|---|---|---|---|
+| Desktop | yes | 3.14t only | yes | JDK 21+ at run time | not decided |
+| Android | yes | no | yes | no | not decided |
+| iOS | yes | no | yes (Kotlin/Native workers) | no | not decided |
+| wasm | no | no | no | no | no |
 
 On wasm, `Default` and `IO` raise `NotImplementedError` and `Main` is the single loop. Issue: to be
 opened.
 
-### S7.8 JVM virtual threads are optional, Kotlin side only: `planned`
+### S7.8 JVM virtual threads: what pins and what does not: `planned`
 
-On desktop with JDK 21 or later, a Kotlin helper may back `Dispatchers.IO`'s blocking work with a
-virtual-thread executor. It never wraps Python frames. It is off by default and gated by the JDK
-version at run time. Reason: the desktop JDK is not fixed (python-multiplatform AGENTS.md §16). Issue:
-to be opened.
+Facts this section rests on (`docs/research.md` §6):
+
+- A virtual thread cannot unmount while a native frame is on its stack. Every Python call from Kotlin
+  on desktop is an FFM downcall, so the virtual thread is pinned to its carrier for exactly the length
+  of that call. Between calls nothing pins it, and it may resume on another carrier.
+- `PyGILState_Ensure` binds the thread state to the **OS thread** (the carrier). python-multiplatform
+  keeps its `withGIL` nesting depth in a Java `ThreadLocal`, which belongs to the **virtual thread**.
+
+Consequence, which every rule below exists to prevent: if a virtual thread parks inside a `withGIL`
+block (a Kotlin lock, `Thread.sleep`, blocking I/O, `runBlocking`), it unmounts while its carrier still
+holds the GIL. Another virtual thread mounted on that carrier sees depth 0 and calls
+`PyGILState_Ensure` on an OS thread that already holds the GIL; the first one later resumes on a
+different carrier and calls `PyGILState_Release` there. That corrupts the interpreter, and under a GIL
+build it can also deadlock every Python thread. Issue: to be opened.
+
+### S7.9 Kotlin mode: a Python coroutine stepped by a Kotlin coroutine: `planned`
+
+`run_on(dispatcher, fn, *args)` (inside a scope: `s.launch(fn, dispatcher=..., mode="kotlin")`) starts
+`fn(*args)` as a coroutine object and hands it to a Kotlin coroutine on `dispatcher`. The Kotlin side
+loops:
+
+1. Take the GIL, call `coro.send(value)` (or `throw`) inside `Context.run` of the task's context,
+   release the GIL. This is one **step**.
+2. Look at what the step yielded:
+   - a Kotlin `suspend` call (binder U-5 awaitable), a `Job`, a `Deferred`, `delay(t)`, a
+     `pythonx.concurrent` channel operation: the Kotlin coroutine suspends on it with **no GIL held and
+     no native frame on the stack**, then resumes with the result;
+   - a bare `asyncio` future bound to some loop: the Kotlin coroutine subscribes with
+     `call_soon_threadsafe` on that loop and suspends until it completes (the same crossing as S4.5);
+   - anything else: the step raises `RuntimeError` into the coroutine, naming the object.
+3. `StopIteration` completes the Kotlin coroutine with its value; an exception fails it.
+
+Inside Kotlin mode `asyncio.get_running_loop()` raises, so `asyncio.sleep`, `asyncio.Lock` and
+streams are not available; `pythonx.concurrent` supplies `delay`, `Mutex`, `Semaphore` and `Channel`
+that work in both modes. Whether to fake a running loop during a step is open (§11, item 6).
+needs binder: stepping a Python coroutine from Kotlin as one call that takes and releases the GIL
+(S12, item 13). Issue: to be opened.
+
+### S7.10 The GIL is never held across a suspension: `planned`
+
+In Kotlin mode the GIL is taken at the start of a step and released at its end, inside one library
+routine that contains no parking call. User Kotlin code never runs between the `Ensure` and the
+`Release` of a step, except as an upcall from Python, and an upcall runs under the step's native
+frame, so the virtual thread stays pinned (S7.8). A Kotlin `suspend` function that Python awaits runs
+after the step ended, without the GIL.
+
+Test: on a virtual-thread dispatcher with more tasks than carriers, record the OS thread id (a
+downcall to `pthread_self`/`gettid`) at `Ensure` and at `Release` of every step for 100,000 steps; every
+pair must match. A second test parks deliberately inside a `withGIL` block on a virtual thread and
+must be refused by the guard of S7.12, not crash. Issue: to be opened.
+
+### S7.11 A started task may move between threads in Kotlin mode: `planned`
+
+Because no loop owns the coroutine, each step may run on a different thread of the dispatcher, and
+Kotlin's own scheduler (work stealing in `Dispatchers.Default`, the virtual-thread `ForkJoinPool`)
+places it. This lifts the S7.3 limit for Kotlin-mode tasks. Two steps of one task never overlap:
+the Kotlin coroutine runs them in sequence, which also gives the happens-before edge a free-threaded
+build needs. What Python code sees: `threading.current_thread()` and `threading.local` belong to the
+carrier of the current step and may differ between two `await`s; `contextvars` stay with the task.
+The documentation says so beside `run_on`. Issue: to be opened.
+
+### S7.12 Python on JVM virtual threads: `planned`
+
+`Dispatchers.Virtual` is a Kotlin dispatcher over `Executors.newVirtualThreadPerTaskExecutor()`.
+Python runs on it only in Kotlin mode (S7.9), so every Python step is one pinned call and the virtual
+thread is free between steps. Rules:
+
+- **No plain blocking Python on it.** `with_context(Dispatchers.Virtual, blocking_fn)` raises
+  `ValueError` and names `Dispatchers.IO`. A plain function would pin the carrier for its whole run,
+  including the time it blocks with the GIL released, so it costs a carrier and gains nothing.
+- **Python steps are rationed on a GIL build.** Before a step takes the GIL, the task acquires a
+  Kotlin `Semaphore` (suspending, so no carrier is blocked) with one permit on a GIL build and the
+  carrier count on 3.14t. Without it, virtual threads waiting in `PyGILState_Ensure` block carriers
+  inside native code and starve the Kotlin virtual threads that share them.
+- **Guard.** A `withGIL` block entered on a virtual thread outside a step is pinned by running it under
+  a native frame (S12, item 14). Until the binder offers that, `Dispatchers.Virtual` refuses to start
+  when the binder lacks it, rather than run unguarded.
+- **Availability.** Desktop with a run-time JDK of 21 or later (checked at run time; the desktop JDK is
+  not fixed, python-multiplatform AGENTS.md §16). Android, iOS and wasm have no JVM virtual threads,
+  and `Dispatchers.Virtual` raises `NotImplementedError` there instead of falling back silently.
+
+What virtual threads buy: 100,000 Kotlin-mode tasks that mostly wait on Kotlin I/O cost a virtual
+thread each instead of a platform thread, and Kotlin blocking work under them (JDBC, files) unmounts
+freely. What they do not buy: CPU parallelism of Python (S7.6) or cheap blocking-style Python
+(S7.14). Issue: to be opened.
+
+### S7.13 Python on any Kotlin dispatcher: `planned`
+
+`Dispatchers.from_kotlin(d)` (S3.7) accepts Kotlin mode: `run_on(Dispatchers.from_kotlin(d), fn)`
+runs a Python coroutine on a single-thread context, `Dispatchers.Default`, a `limitedParallelism`
+view or an app-owned executor. On Android and iOS this is the way to run Python on the threads the
+Kotlin app already manages (no virtual threads there). On Kotlin/Native the thread running a step is
+a Kotlin/Native worker; attaching it to CPython follows S9.6. A Kotlin caller may do the same from
+its side: `pythonCoroutine.awaitOn(dispatcher)` (S6.4) in Kotlin mode. needs binder: S12, items 2
+and 13. Issue: to be opened.
+
+### S7.14 Blocking-style Python on lightweight threads: `planned`, not decided
+
+Writing `data = fetch()` with no `await` and having it park cheaply needs the Python stack to be
+switched out, which neither a JVM virtual thread (pinned by the native frame) nor Kotlin coroutines
+can do. The only candidate is stack switching inside CPython (`greenlet`), still open (§11, item 2).
+Until it is decided, blocking-style Python goes to `Dispatchers.IO` (S3.6). Issue: to be opened.
 
 ---
 
@@ -509,6 +622,9 @@ These appeared during research and INTENT does not cover them.
 3. `StateFlow` and `SharedFlow` as first-class Python types beyond collection.
 4. A structured `Channel` / `Select` type (Go's channels).
 5. Integration with `anyio`, so anyio code runs on these dispatchers.
+6. In Kotlin mode (S7.9), whether a step should set a running loop (`asyncio._set_running_loop`, a
+   private hook) so that `asyncio.sleep` and `asyncio.Lock` work there too. It would widen what runs in
+   Kotlin mode, at the cost of depending on a private asyncio function.
 
 ## 12. Needs binder: list for python-multiplatform issues
 
@@ -538,3 +654,12 @@ These appeared during research and INTENT does not cover them.
 11. **iOS completion thread**: documented, supported way to resume a continuation from a Kotlin/Native
     thread (ROADMAP 13.3). Serves S9.6.
 12. **wasm threads** are out of scope here; noted only because S7.7 depends on them.
+13. **Stepping a Python coroutine from Kotlin.** One binder call that takes the GIL, runs
+    `coro.send(value)` or `coro.throw(exc)` inside a given `contextvars.Context`, releases the GIL and
+    returns the yielded object, the return value or the exception, with no Kotlin code between
+    `Ensure` and `Release`. Serves S7.9, S7.10, S7.13.
+14. **`withGIL` on a JVM virtual thread.** The nesting depth lives in a Java `ThreadLocal` (per
+    virtual thread) while `PyGILState` binds to the carrier (per OS thread), so a virtual thread that
+    parks inside `withGIL` corrupts both. Request: on a virtual thread, run the outermost `withGIL`
+    block under a native frame so the virtual thread stays pinned, or refuse to enter it there.
+    Desktop only. Serves S7.8, S7.12.
