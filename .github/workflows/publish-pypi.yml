@@ -22,8 +22,7 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
           test "$RELEASE_TAG" = "v$version" || { echo "tag $RELEASE_TAG does not match version $version"; exit 1; }
-      # Temporary until CPython 3.15 is final and on the runners: install it through uv (3.15 rc today)
-      # and build with it, since requires-python is >= 3.15.
+      # requires-python is >= 3.15: install CPython 3.15 (3.15.0 final since 2026-10) through uv and build with it.
       - run: uv python install 3.15
       - run: uv build --python 3.15
       - name: Keep pythonx a namespace package
