@@ -132,6 +132,32 @@ free-threaded build, `sys.flags.thread_inherit_context` defaults to `True`; the 
 it, because a carrier thread (S7) starts tasks through `Context.run` with the parent's copy.
 Issue: to be opened.
 
+### S2.9 An app-level scope: `CoroutineScope(dispatcher)`: `planned`
+
+`CoroutineScope(dispatcher)` creates a scope that lives until it is cancelled, not until a block
+ends. It is Kotlin's `CoroutineScope(context)`, and it is the long-lived scope S2.7 allows: created
+at app level and closed explicitly. Source: the 2024 notebook's `DefaultCoroutineScope()` and
+`MainCoroutineScope()`, which were Kotlin's `CoroutineScope(Dispatchers.Default)` and
+`CoroutineScope(Dispatchers.Main)` with `.launch(fn)`. The maintainer kept that meaning (relayed
+2026-10-17, issue #17).
+
+- `scope.launch(fn, *args, name=None) -> Job` may be called from any thread, including code with
+  no running event loop (a Compose click callback). `fn` is a coroutine function, and it runs on
+  the scope's dispatcher (S3).
+- `scope.cancel()` cancels every child and closes the scope. It is idempotent. After it,
+  `launch` raises `RuntimeError` naming the closed scope.
+- `await scope.join()` waits for every child that has been launched so far.
+- A failed child cancels the scope and its other children, as with Kotlin's plain `Job`. The
+  failures are kept on the scope, and `join()` raises them as an `ExceptionGroup` (S8.1). If a
+  scope is never joined, its failures are not lost (S8.4): each is reported once through
+  `sys.unraisablehook` when it happens.
+- A supervisor form (`CoroutineScope(dispatcher, supervisor=True)`, as `SupervisorJob`) keeps
+  sibling failures apart (S2.5).
+
+pythonx-compose's `DefaultCoroutineScope()` is `CoroutineScope(Dispatchers.Default)` and its
+`MainCoroutineScope()` is `CoroutineScope(Dispatchers.Main)` (pythonx-compose INTENT §5.10, SPEC
+S5.7). Issue: #17.
+
 ---
 
 ## 3. Dispatchers
