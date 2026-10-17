@@ -37,9 +37,11 @@ Kotlin `suspend` function (python-multiplatform SPEC U-5); nothing else in this 
 
 ### S1.1 Package and import name: `planned`
 
-Distribution `pythonx-concurrent`, import package `pythonx.concurrent`, pure Python, Python 3.11 or
-later (for `TaskGroup`, `ExceptionGroup`, `asyncio.timeout`). Reason: those three are the base the
-structured API stands on. Issue: to be opened.
+Distribution `pythonx-concurrent`, import package `pythonx.concurrent`, pure Python, Python 3.15 or
+later (`requires-python` in `pyproject.toml`, the thisisthepy ecosystem's standard), on the GIL build
+and the free-threaded 3.15t. The structured API stands on `TaskGroup`, `ExceptionGroup` and
+`asyncio.timeout`, which 3.15 has (they date from 3.11). Decided by the ecosystem lead, 2026-10-17
+(#19). Issue: to be opened.
 
 ### S1.2 No Kotlin renaming, real package on disk: `planned`
 
@@ -177,7 +179,7 @@ function. Dispatchers are Python objects. Each wraps a Kotlin `CoroutineDispatch
 |---|---|---|---|---|
 | `Main` | the UI toolkit thread (Swing/AWT event thread under Compose Desktop) | the main looper | the main dispatch queue | the one thread |
 | `IO` | Kotlin `Dispatchers.IO` threads, each running an asyncio loop on demand (S3.6) | same | same | absent: raises `NotImplementedError` |
-| `Default` | one carrier loop per core on 3.14t, one carrier on a GIL build (S7.2) | same | same | the one thread |
+| `Default` | one carrier loop per core on 3.15t, one carrier on a GIL build (S7.2) | same | same | the one thread |
 | `Unconfined` | resumes on whatever thread resumed it | same | same | the one thread |
 | `Loop` | the current loop | same | same | the one loop |
 
@@ -403,7 +405,7 @@ Issue: to be opened.
 
 ### S7.6 Free-threaded build is the parallel path: `planned`
 
-Parallel execution of Python code needs CPython 3.14t (python-multiplatform SPEC T-2, desktop,
+Parallel execution of Python code needs free-threaded CPython, 3.15t (python-multiplatform SPEC T-2, desktop,
 opt-in). On GIL builds the API behaves identically but concurrent, not parallel. needs binder: a
 free-threaded prebuilt for Android and iOS before parallelism exists there (S12, item 8). Issue:
 to be opened.
@@ -412,7 +414,7 @@ to be opened.
 
 | Platform | Carrier threads | Parallel Python | Kotlin mode (S7.9) | JVM virtual threads (S7.12) | Stackful (S7.14) |
 |---|---|---|---|---|---|
-| Desktop | yes | 3.14t only | yes | JDK 21+ at run time | not decided |
+| Desktop | yes | 3.15t only | yes | JDK 21+ at run time | not decided |
 | Android | yes | no | yes | no | not decided |
 | iOS | yes | no | yes (Kotlin/Native workers) | no | not decided |
 | wasm | no | no | no | no | no |
@@ -494,7 +496,7 @@ thread is free between steps. Rules:
   including the time it blocks with the GIL released, so it costs a carrier and gains nothing.
 - **Python steps are rationed on a GIL build.** Before a step takes the GIL, the task acquires a
   Kotlin `Semaphore` (suspending, so no carrier is blocked) with one permit on a GIL build and the
-  carrier count on 3.14t. Without it, virtual threads waiting in `PyGILState_Ensure` block carriers
+  carrier count on 3.15t. Without it, virtual threads waiting in `PyGILState_Ensure` block carriers
   inside native code and starve the Kotlin virtual threads that share them.
 - **Guard.** A `withGIL` block entered on a virtual thread outside a step is pinned by running it under
   a native frame (S12, item 14). Until the binder offers that, `Dispatchers.Virtual` refuses to start
@@ -596,11 +598,11 @@ helper must run on a worker thread the runtime knows. Issue: to be opened.
 
 Scope, Job, Deferred, cancellation, timeouts and the carrier scheduler are tested on a plain
 interpreter with a fake Kotlin side (`FakeDispatcher`, `FakeSuspend`). No binder is needed. Run on
-CPython 3.11 to 3.14 and on 3.14t:
+CPython 3.15 and on 3.15t:
 
 ```bash
-uv run --python 3.14 --with pytest pytest tests -q
-uv run --python 3.14t --with pytest pytest tests -q
+uv run --python 3.15 --with pytest pytest tests -q
+uv run --python 3.15t --with pytest pytest tests -q
 ```
 
 ### S10.2 Red first, with a cause: `planned`
