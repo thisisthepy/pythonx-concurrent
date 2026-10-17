@@ -105,8 +105,8 @@ Everything beyond the maintainer's words is here until confirmed.
    approval (AGENTS.md §2).
 2. **Package name for the scope object.** The spec uses `Scope`, `launch` and `defer`. Kotlin's
    `async` is a Python keyword, so a different spelling is needed. Confirm the spelling.
-3. **Minimum Python.** The spec assumes 3.11 or later (`TaskGroup`, `ExceptionGroup`). Android and iOS
-   builds ship 3.13 or 3.14, so this should hold.
+3. *(Decided, 2026-10-17, #19.)* **Minimum Python** is 3.15, as `pyproject.toml` and the
+   ecosystem's standard say. Tests run on 3.15 and the free-threaded 3.15t.
 4. **Stackful virtual threads.** Writing blocking-style code on a lightweight thread needs stack
    switching (for example `greenlet`). Whether to support it is undecided and not evaluated on
    mobile.
