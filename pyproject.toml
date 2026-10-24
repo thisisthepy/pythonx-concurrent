@@ -29,3 +29,6 @@ Issues = "https://github.com/thisisthepy/pythonx-concurrent/issues"
 
 [tool.setuptools.packages.find]
 include = ["pythonx.concurrent*"]
+
+[tool.setuptools.package-data]
+"pythonx.concurrent" = ["py.typed"]

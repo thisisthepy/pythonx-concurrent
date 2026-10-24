@@ -11,8 +11,10 @@ Each item carries a status:
 | `partial` | Some of it exists, or its only evidence is outside this repository. |
 | `planned` | Required by INTENT; nothing delivers it yet. |
 
-Every entry below is `planned`. The maintainer ranks this package after the other pythonx work
-(2026-10-04): the spec is written in detail now, implementation comes later. Issue markers read `Issue: to be opened`; the coordinator opens them.
+Milestone 1 (`Scope`, `supervisor_scope`, `CoroutineScope`, `Job`, `Deferred`, `Dispatchers`,
+`KotlinEventLoop`, `with_context`, `run_blocking`, `run_blocking_call`, `with_timeout`,
+`with_timeout_or_none`, `non_cancellable`, `CancelToken` and the `tests/` suite) is `implemented` (#21).
+Items that depend on new binder hooks in `python-multiplatform` remain `planned` or `partial`.
 A line starting `needs binder:` is a request to python-multiplatform. It becomes an issue there and
 is collected in section 12.
 
@@ -28,26 +30,29 @@ tcl install pythonx-concurrent
 
 ## 0. Baseline
 
-Nothing is built. The state this spec starts from is in `docs/research.md` §1: Python can await a
-Kotlin `suspend` function (python-multiplatform SPEC U-5); nothing else in this spec exists.
+Milestone 1 is verified on CPython 3.15 (`31 passed` across 4 test modules, including the TypedPython
+soundness gate against `python-multiplatform` `develop` with 0 errors and 0 warnings) and on
+free-threaded CPython 3.15t (`30 passed, 1 skipped` without `pyrefly`). Python can await a Kotlin
+`suspend` function (python-multiplatform SPEC U-5), and since python-multiplatform #215 and #216 a
+Kotlin `CoroutineDispatcher.dispatch(context, block)` is callable directly from `KotlinEventLoop`.
 
 ---
 
 ## 1. Distribution
 
-### S1.1 Package and import name: `planned`
+### S1.1 Package and import name: `implemented`
 
 Distribution `pythonx-concurrent`, import package `pythonx.concurrent`, pure Python, Python 3.15 or
 later (`requires-python` in `pyproject.toml`, the thisisthepy ecosystem's standard), on the GIL build
 and the free-threaded 3.15t. The structured API stands on `TaskGroup`, `ExceptionGroup` and
 `asyncio.timeout`, which 3.15 has (they date from 3.11). Decided by the ecosystem lead, 2026-10-17
-(#19). Issue: to be opened.
+(#19). Tested in `tests/test_package.py`. Issue: #21.
 
-### S1.2 No Kotlin renaming, real package on disk: `planned`
+### S1.2 No Kotlin renaming, real package on disk: `implemented`
 
 `pythonx/concurrent/` is ordinary source. It imports Kotlin modules under their Kotlin names. It does
 not synthesise modules and does not set `__path__ = []`. Reason: the `pythonx` package is shared with
-`pythonx-compose` and must stay importable from disk. Issue: to be opened.
+`pythonx-compose` and must stay importable from disk. Tested in `tests/test_package.py`. Issue: #21.
 
 ---
 
@@ -86,55 +91,60 @@ async def load(user_id):
 
 `async` is a Python keyword, so Kotlin's `async` is spelled `defer`. Open question 2 in INTENT.
 
-### S2.1 `Scope` is an async context manager: `planned`
+### S2.1 `Scope` is an async context manager: `implemented`
 
 `async with Scope(...) as s:` creates a scope. Leaving the block waits for every child. A child
 failure cancels the other children and the body, then raises after all have finished.
-`Scope` is built on `asyncio.TaskGroup`'s rules and is usable in any running loop. Issue: to be opened.
+`Scope` is built on `asyncio.TaskGroup`'s rules and is usable in any running loop. Tested in
+`tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S2.2 `launch` returns a `Job`: `planned`
+### S2.2 `launch` returns a `Job`: `implemented`
 
 `s.launch(fn, *args, dispatcher=None, name=None) -> Job`. `fn` is a coroutine function. `Job` offers
 `cancel(msg=None)`, `cancelled()`, `done()`, `join()` (awaitable), `is_active()`, `exception()`.
-A `Job` cannot be created outside a scope. Reason: no unstructured spawn. Issue: to be opened.
+A `Job` cannot be created outside a scope. Reason: no unstructured spawn. Tested in
+`tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S2.3 `defer` returns a `Deferred`: `planned`
+### S2.3 `defer` returns a `Deferred`: `implemented`
 
 `s.defer(fn, *args, dispatcher=None, name=None) -> Deferred`. `Deferred` is a `Job` plus `await d`,
-`d.result()` (raises if the job failed or was cancelled) and `await d.await_()`. Issue: to be opened.
+`d.result()` (raises if the job failed or was cancelled) and `await d.await_()`. Tested in
+`tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S2.4 `with_context` switches context for one call: `planned`
+### S2.4 `with_context` switches context for one call: `implemented`
 
 `await with_context(dispatcher, fn, *args)` runs `fn` on `dispatcher` and returns its result. If the
 dispatcher is the current one it calls `fn` directly. Exceptions and cancellation pass through
 unchanged. `fn` may be a coroutine function or, for `Dispatchers.IO`, a plain blocking function
-(S3.6). Issue: to be opened.
+(S3.6). Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S2.5 `supervisor_scope` and `Scope(supervisor=True)`: `planned`
+### S2.5 `supervisor_scope` and `Scope(supervisor=True)`: `implemented`
 
 A supervisor scope does not cancel siblings when one child fails. Failures are kept on the `Job`. It
-is the Kotlin `supervisorScope`. `asyncio.TaskGroup` has no equivalent. Issue: to be opened.
+is the Kotlin `supervisorScope`. `asyncio.TaskGroup` has no equivalent. Tested in
+`tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S2.6 `with_timeout` and `with_timeout_or_none`: `planned`
+### S2.6 `with_timeout` and `with_timeout_or_none`: `implemented`
 
 `async with with_timeout(seconds):` wraps `asyncio.timeout`. On expiry it raises the built-in
 `TimeoutError`. `with_timeout_or_none` yields a flag instead of raising, as Kotlin's
-`withTimeoutOrNull`. Issue: to be opened.
+`withTimeoutOrNull`. Tested in `tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S2.7 Structured-only guarantee: `planned`
+### S2.7 Structured-only guarantee: `implemented`
 
 No public function creates a task that outlives its scope. A global scope (`GlobalScope`) is not
 offered. A user who needs a long-lived scope creates one at app level and closes it explicitly.
-Reason: leaked tasks were the problem structured concurrency removes. Issue: to be opened.
+Reason: leaked tasks were the problem structured concurrency removes. Tested in
+`tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S2.8 Context variables: `planned`
+### S2.8 Context variables: `implemented`
 
 A child inherits a copy of the parent's `contextvars.Context`. `with_context` keeps it. On the
 free-threaded build, `sys.flags.thread_inherit_context` defaults to `True`; the spec does not rely on
 it, because a carrier thread (S7) starts tasks through `Context.run` with the parent's copy.
-Issue: to be opened.
+Tested in `tests/test_scope_and_jobs.py` and `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S2.9 An app-level scope: `CoroutineScope(dispatcher)`: `planned`
+### S2.9 An app-level scope: `CoroutineScope(dispatcher)`: `implemented`
 
 `CoroutineScope(dispatcher)` creates a scope that lives until it is cancelled, not until a block
 ends. It is Kotlin's `CoroutineScope(context)`, and it is the long-lived scope S2.7 allows: created
@@ -158,7 +168,7 @@ at app level and closed explicitly. Source: the 2024 notebook's `DefaultCoroutin
 
 pythonx-compose's `DefaultCoroutineScope()` is `CoroutineScope(Dispatchers.Default)` and its
 `MainCoroutineScope()` is `CoroutineScope(Dispatchers.Main)` (pythonx-compose INTENT §5.10, SPEC
-S5.7). Issue: #17.
+S5.7). Tested in `tests/test_coroutine_scope.py`. Issue: #17, #21.
 
 ---
 
@@ -167,13 +177,14 @@ S5.7). Issue: #17.
 A dispatcher decides which thread, and so which event loop, runs a Python coroutine or a plain
 function. Dispatchers are Python objects. Each wraps a Kotlin `CoroutineDispatcher` where one exists.
 
-### S3.1 Names and meaning: `planned`
+### S3.1 Names and meaning: `implemented`
 
 `Dispatchers.Main`, `Dispatchers.IO`, `Dispatchers.Default`, `Dispatchers.Unconfined`, and
 `Dispatchers.Loop` (the loop already running, the one `asyncio.run` made). Meaning follows
-`kotlinx.coroutines` (`docs/research.md` §2), except as S3.3 to S3.6 say. Issue: to be opened.
+`kotlinx.coroutines` (`docs/research.md` §2), except as S3.3 to S3.6 say. Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S3.2 Mapping per platform: `planned`
+### S3.2 Mapping per platform: `partial`
 
 | Dispatcher | Desktop JVM | Android | iOS | wasm |
 |---|---|---|---|---|
@@ -184,76 +195,79 @@ function. Dispatchers are Python objects. Each wraps a Kotlin `CoroutineDispatch
 | `Loop` | the current loop | same | same | the one loop |
 
 Reason `Default` is one carrier on a GIL build: extra threads add no CPU parallelism there, and they
-cost memory and context switches. Issue: to be opened.
+cost memory and context switches. Tested on Desktop CPython 3.15 and 3.15t in
+`tests/test_dispatchers_and_loops.py`; Android, iOS and wasm runtime checks remain. Issue: #21.
 
-### S3.3 `Main` runs Python on the UI thread: `planned`
+### S3.3 `Main` runs Python on the UI thread: `implemented`
 
 A coroutine launched on `Main` runs inside an event loop whose scheduling is driven by the Kotlin main
 dispatcher (S4.1). Python code on `Main` must not block. The library cannot enforce this; it can log a
 warning when one step takes longer than a threshold (default 100 ms, configurable). Reason: the GIL
-and the UI share the same thread there, so a blocking step freezes the screen. Issue: to be opened.
+and the UI share the same thread there, so a blocking step freezes the screen. Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S3.4 `Default` is for CPU work: `planned`
+### S3.4 `Default` is for CPU work: `implemented`
 
 Tasks that compute without awaiting belong here. On a GIL build they do not run in parallel, and the
-documentation says so beside the dispatcher. Issue: to be opened.
+documentation says so beside the dispatcher. Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S3.5 Selecting a dispatcher: `planned`
+### S3.5 Selecting a dispatcher: `implemented`
 
 `dispatcher=` on `launch`/`defer` and `with_context` select it. A child inherits its parent's
-dispatcher unless it names one, as in Kotlin. Issue: to be opened.
+dispatcher unless it names one, as in Kotlin. Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S3.6 `IO` accepts plain blocking functions: `planned`
+### S3.6 `IO` accepts plain blocking functions: `implemented`
 
 `await with_context(Dispatchers.IO, blocking_fn, *args)` runs a normal function on an `IO` thread
 and returns the value. It is the Kotlin-flavoured `asyncio.to_thread`. A blocking call releases the
 GIL in CPython, so this is parallel even on a GIL build. Cancellation of the awaiting task cancels the
-wait, not the thread (a thread cannot be killed; S5.5). Issue: to be opened.
+wait, not the thread (a thread cannot be killed; S5.5). Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S3.7 `Dispatchers` is extensible: `planned`
+### S3.7 `Dispatchers` is extensible: `implemented`
 
 `Dispatchers.from_kotlin(dispatcher)` wraps any Kotlin `CoroutineDispatcher`. `Dispatchers.limited(d, n)`
-mirrors `limitedParallelism`. needs binder: a Kotlin `CoroutineDispatcher` must be passable from
-Python as an opaque object (S12, item 4). Issue: to be opened.
+mirrors `limitedParallelism`. Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
 ---
 
 ## 4. asyncio interop
 
-### S4.1 An event loop driven by Kotlin: `planned`
+### S4.1 An event loop driven by Kotlin: `implemented`
 
 `KotlinEventLoop` implements `asyncio.AbstractEventLoop` for the threads whose scheduling belongs to a
 Kotlin dispatcher (`Main`). `call_soon`, `call_soon_threadsafe` and `call_at/later` post to the
-Kotlin dispatcher (timers use Kotlin's `delay`). The loop does not own a `selectors` selector.
-`add_reader`, `add_writer` and subprocess APIs raise `NotImplementedError` on it. Reason: the UI thread
-already has a message loop, and a second blocking loop on it is impossible. Network I/O belongs on
-`IO` loops (S4.2). needs binder: Python callable invokable from a Kotlin posted `Runnable`
-(S12, item 5). Issue: to be opened.
+Kotlin dispatcher (timers use Kotlin's `delay` or timer callbacks posted to the dispatcher). The loop
+does not own a `selectors` selector. `add_reader`, `add_writer` and subprocess APIs raise
+`NotImplementedError` on it. Reason: the UI thread already has a message loop, and a second blocking
+loop on it is impossible. Network I/O belongs on `IO` loops (S4.2). Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S4.2 Carrier loops: `planned`
+### S4.2 Carrier loops: `implemented`
 
 A carrier is a thread running a standard `asyncio` loop (`new_event_loop().run_forever()`), with
 selector support. `IO`, `Default` and S7 use carriers. A carrier starts lazily and stops when its
 dispatcher closes. On Android a carrier thread is a thread CPython created, so ART attach and detach
-follow python-multiplatform SPEC C-5. Issue: to be opened.
+follow python-multiplatform SPEC C-5. Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S4.3 Using the host loop: `planned`
+### S4.3 Using the host loop: `implemented`
 
 If a loop is already running when `Scope` is entered, `Dispatchers.Loop` is that loop and nothing is
 created. `Scope` works under plain `asyncio.run` with no Kotlin present, so tests run on a normal
-interpreter. Issue: to be opened.
+interpreter. Tested in `tests/test_dispatchers_and_loops.py` and `tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S4.4 Running a coroutine from non-async code: `planned`
+### S4.4 Running a coroutine from non-async code: `implemented`
 
 `run_blocking(fn, *args)` runs a coroutine to completion on a carrier and blocks the caller, as
-`runBlocking`. It raises `RuntimeError` on `Main`, because that would deadlock the UI loop. Issue:
-to be opened.
+`runBlocking`. It raises `RuntimeError` on `Main`, because that would deadlock the UI loop. Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S4.5 Awaiting across loops: `planned`
+### S4.5 Awaiting across loops: `implemented`
 
 A task on loop A can `await` a `Job` or `Deferred` that runs on loop B. The result crosses with
 `call_soon_threadsafe`. Direct `await` of a bare `asyncio.Future` of another loop is an error, as
-asyncio defines it. Issue: to be opened.
+asyncio defines it. Tested in `tests/test_dispatchers_and_loops.py` and `tests/test_coroutine_scope.py`.
+Issue: #21.
 
 ---
 
@@ -285,28 +299,31 @@ suspend wrapper itself (S12, item 2). Issue: to be opened.
 cancellation must be recognised by the other as a signal, not a failure. needs binder: exception
 type mapping hook in the upcall entry (S12, item 6). Issue: to be opened.
 
-### S5.4 No `uncancel` inside a scope-owned task: `planned`
+### S5.4 No `uncancel` inside a scope-owned task: `implemented`
 
 A `Job` that swallows `CancelledError` and continues is a bug, as in Kotlin. `Scope` detects a task
 that finishes normally after `cancelling() > 0` and raises `RuntimeError` naming it. Reason: a
-Kotlin `Job` cannot be revived, so the two models must agree. Issue: to be opened.
+Kotlin `Job` cannot be revived, so the two models must agree. Tested in
+`tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S5.5 Cancelling a blocking function: `planned`
+### S5.5 Cancelling a blocking function: `implemented`
 
 Cancelling `with_context(Dispatchers.IO, blocking_fn)` stops the wait and marks the job cancelled. The
 thread runs `blocking_fn` to its end, because a thread cannot be interrupted safely. If `blocking_fn`
-accepts a `CancelToken` argument, it receives one and can poll `token.cancelled()`. Issue: to be opened.
+accepts a `CancelToken` argument, it receives one and can poll `token.cancelled()`. Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S5.6 `NonCancellable`: `planned`
+### S5.6 `NonCancellable`: `implemented`
 
 `async with non_cancellable():` shields a cleanup block from cancellation, as Kotlin's
 `withContext(NonCancellable)`. It wraps `asyncio.shield` and keeps the pending cancel to re-raise on exit.
-Issue: to be opened.
+Tested in `tests/test_scope_and_jobs.py`. Issue: #21.
 
-### S5.7 Cancellation of the scope: `planned`
+### S5.7 Cancellation of the scope: `implemented`
 
 `scope.cancel()` cancels every child and then the scope. It is idempotent. A scope tied to a lifecycle
-(a Compose screen) calls it when the lifecycle ends. Issue: to be opened.
+(a Compose screen) calls it when the lifecycle ends. Tested in `tests/test_scope_and_jobs.py` and
+`tests/test_coroutine_scope.py`. Issue: #21.
 
 ---
 
@@ -374,34 +391,34 @@ Loop mode is the default. Kotlin mode exists because the maintainer asked for Py
 threads and on Kotlin threads, and because it is the only mode in which a started task can move
 between threads (S7.11).
 
-### S7.1 Goroutine-style launch: `planned`
+### S7.1 Goroutine-style launch: `implemented`
 
 `scope.launch(fn)` on a multi-carrier dispatcher places the task on one carrier. Many tasks per
-carrier is the normal case. Placement happens at launch, to the least-loaded carrier. Issue: to be
-opened.
+carrier is the normal case. Placement happens at launch, to the least-loaded carrier. Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S7.2 Carrier count: `planned`
+### S7.2 Carrier count: `implemented`
 
 `Dispatchers.Default` has `os.cpu_count()` carriers when the interpreter is free-threaded
 (`sys._is_gil_enabled()` is false) and one carrier otherwise. `PYTHONX_CONCURRENT_CARRIERS` overrides it.
-Reason: S3.2. Issue: to be opened.
+Reason: S3.2. Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S7.3 Work stealing only before the first step: `planned`
+### S7.3 Work stealing only before the first step: `implemented`
 
 An idle carrier may take a task that has not started from a busy carrier's queue. A started task
-never moves. Reason: asyncio tasks are bound to their loop (`docs/research.md` §7). Issue: to be
-opened.
+never moves. Reason: asyncio tasks are bound to their loop (`docs/research.md` §7). Tested in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S7.4 Cooperative, not preemptive: `planned`
+### S7.4 Cooperative, not preemptive: `implemented`
 
 A task that computes without `await` holds its carrier. The documentation says so. `await
-sleep(0)` is the yield point. Issue: to be opened.
+sleep(0)` is the yield point. Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S7.5 Blocking calls leave the carrier: `planned`
+### S7.5 Blocking calls leave the carrier: `implemented`
 
 `run_blocking_call(fn)` inside a task moves `fn` to an `IO` thread so the carrier keeps scheduling
 other tasks, as Go hands off a P. It is `with_context(Dispatchers.IO, fn)` with a shorter name.
-Issue: to be opened.
+Tested in `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
 ### S7.6 Free-threaded build is the parallel path: `planned`
 
@@ -531,12 +548,13 @@ Until it is decided, blocking-style Python goes to `Dispatchers.IO` (S3.6). Issu
 
 ## 8. Errors
 
-### S8.1 Multiple failures raise `ExceptionGroup`: `planned`
+### S8.1 Multiple failures raise `ExceptionGroup`: `implemented`
 
 When several children of a scope fail, the scope raises an `ExceptionGroup` (as `asyncio.TaskGroup`).
 Kotlin's "first exception plus suppressed" is mapped: the first failure is the group's first member,
 and the rest follow. A scope with exactly one failure raises an `ExceptionGroup` of one, so `except*`
-always works. Reason: one rule is easier to teach than two. Issue: to be opened.
+always works. Reason: one rule is easier to teach than two. Tested in `tests/test_scope_and_jobs.py`
+and `tests/test_coroutine_scope.py`. Issue: #21.
 
 ### S8.2 Kotlin exceptions in Python keep their cause: `planned`
 
@@ -549,30 +567,33 @@ the Kotlin throwable on the Python exception (S12, item 6). Issue: to be opened.
 A Python exception that fails a Python coroutine awaited from Kotlin (S6.4) is thrown as the binder's
 `PyException`, with the Python traceback in its message. Issue: to be opened.
 
-### S8.4 Exceptions in `launch` jobs are never lost: `planned`
+### S8.4 Exceptions in `launch` jobs are never lost: `implemented`
 
 A failed `Job` that nobody joined still fails its scope at exit. There is no "exception was never
-retrieved" log. Issue: to be opened.
+retrieved" log. Tested in `tests/test_scope_and_jobs.py` and `tests/test_coroutine_scope.py`.
+Issue: #21.
 
 ---
 
 ## 9. Thread safety and the GIL
 
-### S9.1 No reliance on the GIL for atomicity: `planned`
+### S9.1 No reliance on the GIL for atomicity: `implemented`
 
 State shared between carriers (the job table, queues, counters) is guarded by explicit locks or by
 single-owner loops. Compound operations are never assumed atomic. Reason: free-threaded CPython
-removes that assumption (`docs/research.md` §5). Issue: to be opened.
+removes that assumption (`docs/research.md` §5). Tested on 3.15t in
+`tests/test_dispatchers_and_loops.py`. Issue: #21.
 
-### S9.2 Cross-thread calls go through `call_soon_threadsafe`: `planned`
+### S9.2 Cross-thread calls go through `call_soon_threadsafe`: `implemented`
 
 Nothing touches a loop, task or future from a foreign thread except through
-`call_soon_threadsafe` or `run_coroutine_threadsafe`. Issue: to be opened.
+`call_soon_threadsafe` or `run_coroutine_threadsafe`. Tested in `tests/test_dispatchers_and_loops.py`
+and `tests/test_coroutine_scope.py`. Issue: #21.
 
-### S9.3 Pure Python, no GIL re-enable: `planned`
+### S9.3 Pure Python, no GIL re-enable: `implemented`
 
 The package ships no C extension, so importing it does not re-enable the GIL on a free-threaded
-build. Issue: to be opened.
+build. Tested in `tests/test_package.py`. Issue: #21.
 
 ### S9.4 GIL held when resuming Kotlin continuations: `planned`
 
@@ -594,10 +615,10 @@ helper must run on a worker thread the runtime knows. Issue: to be opened.
 
 ## 10. Testing strategy
 
-### S10.1 Pure-Python layer first: `planned`
+### S10.1 Pure-Python layer first: `implemented`
 
 Scope, Job, Deferred, cancellation, timeouts and the carrier scheduler are tested on a plain
-interpreter with a fake Kotlin side (`FakeDispatcher`, `FakeSuspend`). No binder is needed. Run on
+interpreter with a fake Kotlin side (`FakeKotlinDispatcher`). No binder is needed. Run on
 CPython 3.15 and on 3.15t:
 
 ```bash
@@ -605,11 +626,11 @@ uv run --python 3.15 --with pytest pytest tests -q
 uv run --python 3.15t --with pytest pytest tests -q
 ```
 
-### S10.2 Red first, with a cause: `planned`
+### S10.2 Red first, with a cause: `implemented`
 
 Each entry here gets a test that fails before the code exists. A test says in its name whether it
 expects "not implemented yet" (red) or guards a regression, so a failure can be classified
-(`AGENTS.md` §5, python-multiplatform §14).
+(`AGENTS.md` §5, python-multiplatform §14). Issue: #21.
 
 ### S10.3 Cancellation and race tests: `planned`
 
@@ -629,10 +650,10 @@ After the pure layer: desktop JVM against python-multiplatform fixtures, one mod
 Then Android and iOS emulators, one at a time. Each platform reports which entries pass, in the
 table of S7.7 and S3.2. A skip is not a pass.
 
-### S10.6 Disable-and-fail check: `planned`
+### S10.6 Disable-and-fail check: `implemented`
 
-For each public path, a test disables it and confirms something fails (`AGENTS.md` §8). Issue: to be
-opened.
+For each public path, a test disables it and confirms something fails (`AGENTS.md` §8). Tested in
+`tests/test_scope_and_jobs.py` and `tests/test_dispatchers_and_loops.py`. Issue: #21.
 
 ### S10.7 GraalVM native image: `planned`
 

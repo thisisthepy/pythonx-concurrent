@@ -36,9 +36,10 @@ Do not create new folders or files at the repository root on your own. Temporary
 git-ignored `.tmp/`, CI scripts in `.github/scripts/`.
 
 The standing root entries are `README.md`, `AGENTS.md`, `LICENSE`, `.gitignore`, `.github/`, `docs/`,
-`pyproject.toml` and `pythonx/` (the package; added with the maintainer's approval on 2026-10-04 to
-reserve the name on PyPI). If another top-level entry seems necessary (`tests/`, a Kotlin module),
-propose it (what it is, why, and why it cannot live inside an existing directory) and wait for approval.
+`pyproject.toml`, `pythonx/` (the package; added with the maintainer's approval on 2026-10-04 to
+reserve the name on PyPI) and `tests/` (approved by the maintainer, 2026-10-24). If another top-level
+entry seems necessary (for example a Kotlin module), propose it (what it is, why, and why it cannot
+live inside an existing directory) and wait for approval.
 
 ## 3. Worktrees link large artefacts instead of copying them
 
@@ -165,8 +166,10 @@ Multiplatform through python-multiplatform. It makes concurrency comfortable in 
 bridges `asyncio` and Kotlin coroutines, gives Python structured concurrency with Kotlin's
 vocabulary, and plans a goroutine-style scheduler on free-threaded CPython.
 
-Status: spec stage. There is no code. `docs/INTENT.md` is the boundary, `docs/SPEC.md` is the
-behavioural contract, `docs/research.md` holds the evidence.
+Status: Milestone 1 implemented (`Scope`, `supervisor_scope`, `CoroutineScope`, `Job`, `Deferred`,
+`Dispatchers`, `KotlinEventLoop`, `with_context`, `run_blocking`, `run_blocking_call`, `with_timeout`,
+`with_timeout_or_none`, `non_cancellable`, `CancelToken`). `docs/INTENT.md` is the boundary,
+`docs/SPEC.md` is the behavioural contract, `docs/research.md` holds the evidence.
 
 | Path | What it is |
 |---|---|
@@ -175,6 +178,8 @@ behavioural contract, `docs/research.md` holds the evidence.
 | `docs/INTENT.md` | What the project is for, and what it is not |
 | `docs/SPEC.md` | Numbered behaviour entries, each with a status |
 | `docs/research.md` | Findings with sources, and per-platform feasibility |
+| `pythonx/concurrent/` | Pure-Python implementation |
+| `tests/` | Test suite (CPython 3.15 and free-threaded 3.15t) |
 | `AGENTS.md` | This file |
 | `LICENSE` | Apache-2.0 |
 
