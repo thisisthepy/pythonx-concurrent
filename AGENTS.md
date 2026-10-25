@@ -20,7 +20,7 @@ files) lives **inside this repository's root directory.**
 | What | Where |
 |---|---|
 | Worktrees | `.worktrees/<name>` (git-ignored) |
-| Temporary files | `.tmp/` (git-ignored); delete when done |
+| Temporary files | the session scratchpad directory, or `.cache/` (git-ignored); delete when done |
 | CI scripts | `.github/scripts/` |
 
 Before writing a file, check that its absolute path starts with this repository's root. If it does
@@ -33,7 +33,7 @@ Writing to *another* repository is not an exception either. Do it only when told
 ### Do not add top-level folders
 
 Do not create new folders or files at the repository root on your own. Temporary files go in the
-git-ignored `.tmp/`, CI scripts in `.github/scripts/`.
+git-ignored `.cache/`, CI scripts in `.github/scripts/`.
 
 The standing root entries are `README.md`, `AGENTS.md`, `LICENSE`, `.gitignore`, `.github/`, `docs/`,
 `pyproject.toml`, `pythonx/` (the package; added with the maintainer's approval on 2026-10-04 to
