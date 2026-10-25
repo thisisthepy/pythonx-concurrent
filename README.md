@@ -5,7 +5,7 @@ English | [한국어](https://github.com/thisisthepy/pythonx-concurrent/blob/mai
 **Comfortable concurrency for Python apps on Kotlin Multiplatform: asyncio and Kotlin coroutines, together.**
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7c4dff.svg)](https://github.com/thisisthepy/pythonx-concurrent/blob/main/LICENSE)
-[![Status](https://img.shields.io/badge/status-spec%20stage-lightgrey.svg)](#status)
+[![Status](https://img.shields.io/badge/status-alpha-blue.svg)](#status)
 
 ## Why
 
@@ -15,15 +15,17 @@ concurrency. Python has `asyncio`. Kotlin has coroutines, and on Android you wil
 `pythonx-concurrent` is a pythonx library, Python language extensions in the spirit of androidx and
 kotlinx. It joins the two worlds and gives Python the structure `kotlinx.coroutines` gives Kotlin.
 
-## What it will do
+## What it does
 
-- **Scopes and jobs**, spelled like `asyncio.TaskGroup`, named like Kotlin: `launch`, `Job`,
-  `with_context`, `with_timeout`.
-- **Dispatchers**: `Main`, `IO` and `Default`, mapped to each platform's threads.
-- **Both-way bridge**: Python awaits Kotlin `suspend` functions and `Flow`. Kotlin awaits Python
-  coroutines. Cancellation flows both ways.
-- **Goroutine-style scheduling** of many lightweight tasks over a few threads, parallel on
-  free-threaded CPython where that exists.
+- **Scopes and jobs**, spelled like `asyncio.TaskGroup`, named like Kotlin: `Scope`,
+  `supervisor_scope`, `CoroutineScope`, `launch`, `defer`, `Job`, `Deferred`, `with_context`,
+  `with_timeout`, `with_timeout_or_none`, `non_cancellable`.
+- **Dispatchers**: `Main`, `IO`, `Default`, `Unconfined` and `Loop`, plus `Dispatchers.from_kotlin`
+  and `Dispatchers.limited`.
+- **Both-way bridge**: Python awaits Kotlin `suspend` functions and `Flow` (planned). Kotlin awaits
+  Python coroutines (planned).
+- **Goroutine-style scheduling** of lightweight tasks over carrier loops with pre-first-step work
+  stealing, parallel on free-threaded CPython 3.15t.
 
 ```python
 from pythonx.concurrent import Scope, Dispatchers, with_context
@@ -35,21 +37,21 @@ async def load(user_id):
     return profile.result(), data
 ```
 
-<sub>This example shows the planned spelling. Nothing is built yet.</sub>
-
 ## Install
-
-Not published yet. When it is:
 
 ```bash
 uv add --prerelease allow pythonx-concurrent
+ppp core add "pythonx-concurrent==0.0.1a1"
+tcl install pythonx-concurrent
 ```
 
 ## Status
 
-Spec stage. There is no code. The intent, the behaviour contract and the research are written, and
-every behaviour is `planned`. Several features wait on python-multiplatform; each is tracked as an
-issue there.
+Milestone 1 is implemented and tested on CPython 3.15 and free-threaded CPython 3.15t (`Scope`,
+`supervisor_scope`, `CoroutineScope`, `Job`, `Deferred`, `Dispatchers`, `KotlinEventLoop`,
+`with_context`, `run_blocking`, `run_blocking_call`, `with_timeout`, `with_timeout_or_none`,
+`non_cancellable`, `CancelToken`). Features that need new hooks in `python-multiplatform` (`Flow`,
+Kotlin-mode stepping, parent `Job` propagation) are tracked as issues there.
 
 ## License
 
