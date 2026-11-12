@@ -125,8 +125,10 @@ dispatchers, a `Job` handle with Kotlin semantics, and the Kotlin bridge.
   statement from Google. Treat Android virtual threads as unavailable. `(unverified)` beyond that page.
 - **Kotlin/Native.** No virtual threads. Kotlin/Native threads are OS threads over a shared heap with
   a tracing GC. Source: https://kotlinlang.org/docs/native-memory-manager.html
-- **wasm.** No threads in the supported setup (python-multiplatform SPEC U-5 says `planned` on wasm
-  because there are no threads).
+- **wasm.** No JVM virtual threads. Threads exist only as Web Workers sharing memory (pthreads), which
+  need a cross-origin isolated page. The maintainer decided on 2026-10-04 that the wasm interpreter
+  is free-threaded 3.15t with pthreads and that isolation is the default (python-multiplatform #175);
+  that build does not exist yet, and python-multiplatform SPEC U-5 is still `planned` on wasm.
 
 ## 7. Goroutines and M:N scheduling
 
@@ -154,16 +156,16 @@ dispatchers, a `Job` handle with Kotlin semantics, and the Kotlin bridge.
 
 | Capability | Desktop JVM | Android (ART) | iOS (Kotlin/Native) | wasm |
 |---|---|---|---|---|
-| Python awaits Kotlin `suspend` | works today (U-5) | works today, device-tested in the sample | works in library tests; sample needs a worker | planned, no threads |
-| Kotlin awaits Python coroutine | feasible, needs binder work | feasible, needs binder work | feasible, needs binder work | not feasible without threads, single-loop design only |
-| Dispatchers.Main for Python tasks | feasible (needs a UI artifact such as Swing/Compose) | feasible (Android main looper) | feasible (main queue) `(unverified, to be tested)` | the one thread |
-| Dispatchers.IO / Default for Python tasks | feasible | feasible | feasible (K/N has both) | absent |
-| Several asyncio loops on carrier threads | feasible | feasible | feasible | no |
-| Real CPU parallelism of Python code | only on 3.14t (opt-in) | no free-threaded prebuilt | no free-threaded prebuilt | no |
+| Python awaits Kotlin `suspend` | works today (U-5) | works today, device-tested in the sample | works in library tests; sample needs a worker | planned (needs the threaded 3.15t build, python-multiplatform #175) |
+| Kotlin awaits Python coroutine | feasible, needs binder work | feasible, needs binder work | feasible, needs binder work | feasible once the threaded build exists (#175), needs binder work |
+| Dispatchers.Main for Python tasks | feasible (needs a UI artifact such as Swing/Compose) | feasible (Android main looper) | feasible (main queue) `(unverified, to be tested)` | the page's main thread |
+| Dispatchers.IO / Default for Python tasks | feasible | feasible | feasible (K/N has both) | feasible on Web Workers in a cross-origin isolated page (#175) |
+| Several asyncio loops on carrier threads | feasible | feasible | feasible | feasible once #175 lands |
+| Real CPU parallelism of Python code | only on 3.14t (opt-in) | no free-threaded prebuilt | no free-threaded prebuilt | 3.15t with pthreads, decided, not built yet (#175) |
 | JVM virtual threads | JDK 21+; Python coroutines stepped from Kotlin, never blocking-style Python (SPEC S7.12) | not available | not applicable | not applicable |
-| Goroutine-style tasks over carriers | feasible; parallel on 3.14t, concurrent only on the GIL build | feasible, concurrent only | feasible, concurrent only | no |
+| Goroutine-style tasks over carriers | feasible; parallel on 3.14t, concurrent only on the GIL build | feasible, concurrent only | feasible, concurrent only | feasible once #175 lands |
 | Stackful virtual threads (blocking style) | `(unverified)` via greenlet | `(unverified)` | `(unverified)` | no |
-| Free-threaded safety work | needed | needed if a prebuilt appears | needed if a prebuilt appears | none |
+| Free-threaded safety work | needed | needed if a prebuilt appears | needed if a prebuilt appears | needed |
 
 ## 9. What is hard or impossible
 

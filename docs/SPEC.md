@@ -188,15 +188,26 @@ function. Dispatchers are Python objects. Each wraps a Kotlin `CoroutineDispatch
 
 | Dispatcher | Desktop JVM | Android | iOS | wasm |
 |---|---|---|---|---|
-| `Main` | the UI toolkit thread (Swing/AWT event thread under Compose Desktop) | the main looper | the main dispatch queue | the one thread |
-| `IO` | Kotlin `Dispatchers.IO` threads, each running an asyncio loop on demand (S3.6) | same | same | absent: raises `NotImplementedError` |
-| `Default` | one carrier loop per core on 3.15t, one carrier on a GIL build (S7.2) | same | same | the one thread |
-| `Unconfined` | resumes on whatever thread resumed it | same | same | the one thread |
-| `Loop` | the current loop | same | same | the one loop |
+| `Main` | the UI toolkit thread (Swing/AWT event thread under Compose Desktop) | the main looper | the main dispatch queue | the page's main thread |
+| `IO` | Kotlin `Dispatchers.IO` threads, each running an asyncio loop on demand (S3.6) | same | same | Web Worker threads (pthreads) in a cross-origin isolated page, each running an asyncio loop on demand |
+| `Default` | one carrier loop per core on 3.15t, one carrier on a GIL build (S7.2) | same | same | one carrier loop per core on Web Worker threads (pthreads) in a cross-origin isolated page |
+| `Unconfined` | resumes on whatever thread resumed it | same | same | same |
+| `Loop` | the current loop | same | same | same |
 
 Reason `Default` is one carrier on a GIL build: extra threads add no CPU parallelism there, and they
 cost memory and context switches. Tested on Desktop CPython 3.15 and 3.15t in
 `tests/test_dispatchers_and_loops.py`; Android, iOS and wasm runtime checks remain. Issue: #21.
+
+wasm column: maintainer decision of 2026-10-04 (python-multiplatform #158, #175): the wasm interpreter
+is free-threaded CPython 3.15t built with pthreads, and the page is cross-origin isolated by default
+(COOP `same-origin`, COEP `require-corp` or `credentialless`, with a service-worker fallback for hosts
+that cannot set headers). A thread on wasm is a Web Worker sharing the module's memory, so `IO` and
+`Default` have threads to run on. When the page is not cross-origin isolated (`crossOriginIsolated`
+is false), `SharedArrayBuffer` and therefore threads are unavailable, and the python-multiplatform
+runtime refuses to start with an explanation (#175); there is no single-thread fallback in which
+`IO` or `Default` would run. needs binder: the threaded wasm build (python-multiplatform #175, not yet
+built: whether `--disable-gil` builds for emscripten is still unverified there). Until it lands the
+wasm column is `planned`.
 
 ### S3.3 `Main` runs Python on the UI thread: `implemented`
 
@@ -434,10 +445,13 @@ to be opened.
 | Desktop | yes | 3.15t only | yes | JDK 21+ at run time | not decided |
 | Android | yes | no | yes | no | not decided |
 | iOS | yes | no | yes (Kotlin/Native workers) | no | not decided |
-| wasm | no | no | no | no | no |
+| wasm | yes (Web Workers, cross-origin isolated page) | 3.15t | not decided | no | not decided |
 
-On wasm, `Default` and `IO` raise `NotImplementedError` and `Main` is the single loop. Issue: to be
-opened.
+On wasm (decision of 2026-10-04, python-multiplatform #158, #175), carriers are Web Worker threads of
+the free-threaded 3.15t pthreads build, available only in a cross-origin isolated page; a page that
+is not isolated does not start the runtime at all (S3.2). Kotlin mode on wasm is not decided:
+Kotlin/Wasm's own thread support is a separate question from CPython's. needs binder:
+python-multiplatform #175. Issue: to be opened.
 
 ### S7.8 JVM virtual threads: what pins and what does not: `planned`
 
@@ -702,7 +716,8 @@ These appeared during research and INTENT does not cover them.
     result goes to. Serves S6.1.
 11. **iOS completion thread**: documented, supported way to resume a continuation from a Kotlin/Native
     thread (ROADMAP 13.3). Serves S9.6.
-12. **wasm threads** are out of scope here; noted only because S7.7 depends on them.
+12. **wasm threads**: the threaded 3.15t wasm build under cross-origin isolation (python-multiplatform
+    #175, maintainer decision 2026-10-04). Built in that repository; S3.2 and S7.7 depend on it.
 13. **Stepping a Python coroutine from Kotlin.** One binder call that takes the GIL, runs
     `coro.send(value)` or `coro.throw(exc)` inside a given `contextvars.Context`, releases the GIL and
     returns the yielded object, the return value or the exception, with no Kotlin code between
