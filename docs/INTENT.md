@@ -84,9 +84,11 @@ Python app that runs on Kotlin Multiplatform (Android, iOS, desktop). It has fou
   AGENTS.md §12.8). Per-interpreter GIL was rejected there.
 - **Not a Kotlin renamer.** No `androidx`-to-`pythonx` style mapping of Kotlin names lives here or in
   the binder.
-- **Not a promise of identical behaviour on every platform.** Where the platform lacks a thing
-  (threads on wasm, free-threaded builds on mobile), the feature is absent and says so. It is not
-  stubbed.
+- **Not a promise of identical behaviour on every platform.** Where the platform lacks a thing,
+  the feature is absent and says so. It is not stubbed. (Threads on wasm and free-threaded builds
+  on mobile used to be the examples here; both now exist: free-threaded CPython 3.15t is the only
+  build, python-multiplatform #158, and wasm runs 3.15t with pthreads, python-multiplatform #175.
+  Corrected 2026-11-13 with the owner's OK.)
 - **Not blocking-style Python on JVM virtual threads.** A virtual thread is pinned while Python
   runs, so a plain blocking Python function gains nothing from one (`docs/research.md` §6). Python
   coroutines do run on virtual threads and on any Kotlin thread, one step at a time, with Kotlin
