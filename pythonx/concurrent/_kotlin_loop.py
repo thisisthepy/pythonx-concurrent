@@ -39,7 +39,11 @@ class KotlinEventLoop(asyncio.AbstractEventLoop):
     def _post(self, callback: Callable[[], None]) -> None:
         disp = self._kotlin_dispatcher
         if hasattr(disp, "dispatch"):
-            cast(_KotlinDispatcherLike, disp).dispatch(None, callback)
+            # `CoroutineDispatcher.dispatch(context: CoroutineContext, block: Runnable)`: the context
+            # is non-null in Kotlin, so `None` is refused by the binder. The dispatcher is itself a
+            # `CoroutineContext` element, so it is passed as its own context (python-multiplatform
+            # SPEC B-5b, #164 items 4 and 5).
+            cast(_KotlinDispatcherLike, disp).dispatch(disp, callback)
         elif callable(disp):
             cast("Callable[[Callable[[], None]], object]", disp)(callback)
         else:
