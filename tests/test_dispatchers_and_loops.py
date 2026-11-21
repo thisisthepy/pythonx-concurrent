@@ -37,6 +37,10 @@ class FakeKotlinDispatcher:
         self._loop.close()
 
     def dispatch(self, context: object, block: Callable[[], None]) -> None:
+        # Kotlin's `dispatch(context: CoroutineContext, block: Runnable)` has a non-null context;
+        # the real binder refuses `None`, so the fake does too.
+        if context is None:
+            raise TypeError("dispatch(context, block): context must be a CoroutineContext, not None")
         self.dispatch_count += 1
         self._loop.call_soon_threadsafe(block)
 
