@@ -248,7 +248,9 @@ mirrors `limitedParallelism`. Tested in `tests/test_dispatchers_and_loops.py`. I
 
 `KotlinEventLoop` implements `asyncio.AbstractEventLoop` for the threads whose scheduling belongs to a
 Kotlin dispatcher (`Main`). `call_soon`, `call_soon_threadsafe` and `call_at/later` post to the
-Kotlin dispatcher (timers use Kotlin's `delay` or timer callbacks posted to the dispatcher). The loop
+Kotlin dispatcher (timers use Kotlin's `delay` or timer callbacks posted to the dispatcher). A post is
+`dispatcher.dispatch(dispatcher, callback)`: Kotlin's `context` parameter is non-null, and the
+dispatcher is itself a `CoroutineContext` (python-multiplatform SPEC B-5b). The loop
 does not own a `selectors` selector. `add_reader`, `add_writer` and subprocess APIs raise
 `NotImplementedError` on it. Reason: the UI thread already has a message loop, and a second blocking
 loop on it is impossible. Network I/O belongs on `IO` loops (S4.2). Tested in
